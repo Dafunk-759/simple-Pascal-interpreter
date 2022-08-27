@@ -1,5 +1,0 @@
-I, Zhang Jiaqi, of being sound mind and body, do hereby pledge to commit to studying interpreters and compilers starting today and get to a point where I know 100% how they work!
-
-Signature: Zhang Jiaqi
-
-Date: 2022.8.23
