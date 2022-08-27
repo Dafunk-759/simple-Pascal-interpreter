@@ -17,6 +17,11 @@ const MINUS = "MINUS";
 const MUL = "MUL";
 const INT_DIV = "INT_DIV";
 const FLOAT_DIV = "FLOAT_DIV";
+const EQ = "EQ";
+const GTEQ = "GTEQ";
+const LTEQ = "LTEQ";
+const GT = "GT";
+const LT = "LT";
 
 const EOF = "EOF";
 const LPAREN = "LPAREN";
@@ -27,6 +32,9 @@ const END = "END";
 const SEMI = "SEMI";
 const ASSIGN = "ASSIGN";
 const ID = "ID";
+const IF = "IF";
+const ELSE = "ELSE";
+const WHILE = "WHILE";
 
 const PROGRAM = "PROGRAM";
 const PROCEDURE = "PROCEDURE";
@@ -68,6 +76,14 @@ class Token {
     INTEGER,
     REAL,
     PROCEDURE,
+    IF,
+    ELSE,
+    EQ,
+    GTEQ,
+    LTEQ,
+    GT,
+    LT,
+    WHILE,
   };
 }
 
@@ -80,6 +96,9 @@ const RESERVED_KEYWORDS = {
   DIV: (l, c) => new Token(INT_DIV, "DIV", l, c),
   BEGIN: (l, c) => new Token(BEGIN, "BEGIN", l, c),
   END: (l, c) => new Token(END, "END", l, c),
+  IF: (l, c) => new Token(IF, "IF", l, c),
+  ELSE: (l, c) => new Token(ELSE, "ELSE", l, c),
+  WHILE: (l, c) => new Token(WHILE, "WHILE", l, c),
 };
 
 const isDigit = (c) => c && c.charCodeAt(0) >= 48 && c.charCodeAt(0) <= 57;
@@ -249,11 +268,37 @@ at line:${this.line} column:${this.column}`);
 
     if (c === ":") {
       if (this.#peek() === "=") {
-        this.pos += 2;
+        this.#advance();
+        this.#advance();
         return new Token(ASSIGN, ":=", this.line, this.column);
       }
       this.#advance();
       return new Token(COLON, ":", this.line, this.column);
+    }
+
+    if (c === "=") {
+      this.#advance();
+      return new Token(EQ, "=", this.line, this.column);
+    }
+
+    if (c === "<") {
+      if (this.#peek() === "=") {
+        this.#advance();
+        this.#advance();
+        return new Token(LTEQ, "<=", this.line, this.column);
+      }
+      this.#advance();
+      return new Token(LT, "<", this.line, this.column);
+    }
+
+    if (c === ">") {
+      if (this.#peek() === "=") {
+        this.#advance();
+        this.#advance();
+        return new Token(GTEQ, ">=", this.line, this.column);
+      }
+      this.#advance();
+      return new Token(GT, ">", this.line, this.column);
     }
 
     this.#error(c);
@@ -365,6 +410,23 @@ class Assign extends AST {
   }
 }
 
+class Ifst extends AST {
+  constructor(test, then, other) {
+    super();
+    this.test = test;
+    this.then = then;
+    this.other = other;
+  }
+}
+
+class WhileSt extends AST {
+  constructor(test, body) {
+    super();
+    this.test = test;
+    this.body = body;
+  }
+}
+
 class Var extends AST {
   constructor(token) {
     super();
@@ -418,56 +480,76 @@ at line: ${this.currentToken.line} column: ${this.currentToken.column}
     }
   }
 
-  #term() {
-    // term :  factor ((MUL | INT_DIV | FLOAT_DIV) factor)*
-    let n = this.#factor();
-
-    while (
-      this.currentToken.type === MUL ||
-      this.currentToken.type === INT_DIV ||
-      this.currentToken.type === FLOAT_DIV
-    ) {
-      let t = this.currentToken;
-
-      if (t.type === MUL) {
-        this.#eat(MUL);
-        n = new BinOp(n, t, this.#factor());
-      } else if (t.type === INT_DIV) {
-        this.#eat(INT_DIV);
-        n = new BinOp(n, t, this.#factor());
-      } else if (t.type === FLOAT_DIV) {
-        this.#eat(FLOAT_DIV);
-        n = new BinOp(n, t, this.#factor());
-      }
-    }
-
-    return n;
-  }
-
   #expr() {
     /**
-     * expr : term ((PLUS | MINUS) term)*
-     * term : factor ((MUL | DIV) factor)*
+     * expr :  arithmeticExpr1 ((EQ | GTEQ | LTEQ | GT | LT) arithmeticExpr1)*
+     * arithmeticExpr1 : arithmeticExpr2 ((PLUS | MINUS) arithmeticExpr2)*
+     * arithmeticExpr2 : factor ((MUL | INT_DIV | FLOAT_DIV) factor)*
      * factor : (PLUS|MINUS)factor | INTEGER | LP expr RP
      *
      */
-    let n = this.#term();
 
-    while (
-      this.currentToken.type === PLUS ||
-      this.currentToken.type === MINUS
-    ) {
-      let t = this.currentToken;
-      if (t.type === PLUS) {
-        this.#eat(PLUS);
-        n = new BinOp(n, t, this.#term());
-      } else if (t.type === MINUS) {
-        this.#eat(MINUS);
-        n = new BinOp(n, t, this.#term());
+    const arithmeticExpr2 = () => {
+      // precedence 2 (bigger higher)
+      // MUL
+
+      let n = this.#factor();
+
+      while (true) {
+        let t = this.currentToken;
+
+        if (t.type === MUL) {
+          this.#eat(MUL);
+        } else if (t.type === INT_DIV) {
+          this.#eat(INT_DIV);
+        } else if (t.type === FLOAT_DIV) {
+          this.#eat(FLOAT_DIV);
+        } else break;
+        n = new BinOp(n, t, this.#factor());
       }
-    }
 
-    return n;
+      return n;
+    };
+
+    const arithmeticExpr1 = () => {
+      let n = arithmeticExpr2();
+
+      while (true) {
+        let t = this.currentToken;
+        if (t.type === PLUS) {
+          this.#eat(PLUS);
+        } else if (t.type === MINUS) {
+          this.#eat(MINUS);
+        } else break;
+        n = new BinOp(n, t, arithmeticExpr2());
+      }
+
+      return n;
+    };
+
+    const relationExpr1 = () => {
+      let n = arithmeticExpr1();
+
+      while (true) {
+        let t = this.currentToken;
+        if (t.type === EQ) {
+          this.#eat(EQ);
+        } else if (t.type === GTEQ) {
+          this.#eat(GTEQ);
+        } else if (t.type === LTEQ) {
+          this.#eat(LTEQ);
+        } else if (t.type === LT) {
+          this.#eat(LT);
+        } else if (t.type === GT) {
+          this.#eat(GT);
+        } else break;
+        n = new BinOp(n, t, arithmeticExpr1());
+      }
+
+      return n;
+    };
+
+    return relationExpr1();
   }
 
   #variable() {
@@ -492,6 +574,10 @@ at line: ${this.currentToken.line} column: ${this.currentToken.column}
     switch (this.currentToken.type) {
       case BEGIN:
         return this.#compoundStatement();
+      case IF:
+        return this.#ifStatement();
+      case WHILE:
+        return this.#whileStatement();
       case ID:
         if (this.lexer.char === "(") {
           return this.#procCallStatement();
@@ -501,6 +587,29 @@ at line: ${this.currentToken.line} column: ${this.currentToken.column}
       default:
         return this.#empty();
     }
+  }
+
+  #whileStatement() {
+    this.#eat(WHILE);
+    this.#eat(LPAREN);
+    let test = this.#expr();
+    this.#eat(RPAREN);
+    let body = this.#statement();
+    return new WhileSt(test, body);
+  }
+
+  #ifStatement() {
+    this.#eat(IF);
+    this.#eat(LPAREN);
+    let test = this.#expr();
+    this.#eat(RPAREN);
+    let then = this.#statement();
+    let other;
+    if (this.currentToken.type === ELSE) {
+      this.#eat(ELSE);
+      other = this.#statement();
+    }
+    return new Ifst(test, then, other);
   }
 
   #procCallStatement() {
@@ -807,6 +916,17 @@ class SemanticAnalyzer extends Visitor {
     this.visit(node.right);
   }
 
+  visitIfst(node) {
+    this.visit(node.test);
+    this.visit(node.then);
+    this.visit(node.other);
+  }
+
+  visitWhileSt(node) {
+    this.visit(node.test);
+    this.visit(node.body);
+  }
+
   visitVar(node) {
     if (this.scope.lookup(node.value) == undefined) {
       this.#error(`Name Error:${node.value} is undefined`, node.token);
@@ -955,6 +1075,10 @@ class Interpreter extends Visitor {
   visitAssign(node) {
     this.callStack.top.setItem(node.left.value, this.visit(node.right));
   }
+
+  visitIfst(node) {}
+
+  visitWhileSt(node) {}
 
   visitVar(node) {
     let varName = node.value;

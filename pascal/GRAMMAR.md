@@ -30,19 +30,29 @@
   ??
 
   statement           :  compoundStatement
+                      |  ifStatement
                       |  assignmentStatement
                       |  procCallStatement
+                      |  whileStatement
                       |  empty
   
   assignmentStatement :  variable ASSIGN expr
 
   procCallStatement   :  ID LPAREN (expr (COMMA expr)*)? RPAREN
 
+  ifStatement         :  IF LPAREN expr RPAREN statement \
+                        (ELSE statement)?
+
+  whileStatement      : WHILE LPAREN expr RPAREN statement
+
   empty               :  
 
-  expr                :  term ((PLUS | MINUS) term)*
 
-  term                :  factor ((MUL | INT_DIV | FLOAT_DIV) factor)*
+  expr                :  arithmeticExpr1 ((EQ | GTEQ | LTEQ | GT | LT) arithmeticExpr1)*
+
+  arithmeticExpr1     :  arithmeticExpr2 ((PLUS | MINUS) arithmeticExpr2)*
+
+  arithmeticExpr2     :  factor ((MUL | INT_DIV | FLOAT_DIV) factor)*
 
   factor              :  PLUS factor
                       |  MINUS factor

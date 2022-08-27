@@ -454,6 +454,127 @@ end.  { Main }`;
           // });
         });
       });
+
+      it("with if statement 1", () => {
+        let code = `\
+program Main;
+var a, b : integer;
+
+begin { Main }
+  a := 1;
+  b := 0;
+  if (a) begin
+    a := 0;
+  end else if (b) begin
+    b := 1;
+  end else begin
+    a := 2;
+    b := 2;
+  end
+end.  { Main }`;
+
+        assert.doesNotThrow(() => {
+          let ast = new pascal.Parser(code).parse();
+          // console.log(ast);
+          // ast.block.declarations.forEach((d) => {
+          //   console.log(d);
+          // });
+        });
+      });
+
+      it("with if statement 2", () => {
+        let code = `\
+program Main;
+var a, b : integer;
+
+begin { Main }
+  a := 1;
+  b := 0;
+  if (a) a := 0
+  else if (b) b := 1
+  else begin
+    a := 2;
+    b := 2
+  end
+end.  { Main }`;
+        assert.doesNotThrow(() => {
+          let ast = new pascal.Parser(code).parse();
+          // console.log(ast.block.compoundStatemen.children)
+          // console.log(ast);
+          // ast.block.declarations.forEach((d) => {
+          //   console.log(d);
+          // });
+        });
+      });
+
+      it("with if statement 3", () => {
+        let code = `\
+program Main;
+var a, b : integer;
+
+begin { Main }
+  a := 1;
+  if (a) a := 0
+  else if (b) b := 1
+  else begin
+    a := 2;
+    b := 2
+  end;
+  b := 0
+end.  { Main }`;
+        assert.doesNotThrow(() => {
+          let ast = new pascal.Parser(code).parse();
+          // console.log(ast.block.compoundStatemen.children)
+          // console.log(ast);
+          // ast.block.declarations.forEach((d) => {
+          //   console.log(d);
+          // });
+        });
+      });
+
+      it("with if relation expr 1", () => {
+        let code = `\
+program Main;
+var a, b : integer;
+
+begin { Main }
+  a := 1;
+  if (a > 10) a := 10
+  else if (a >= 20) a := 20
+  else if (b <= 5) b := 1
+  else if (b < 0) b := -1
+  else begin
+    a := 2;
+    b := 2
+  end;
+  b := 0
+end.  { Main }`;
+        assert.doesNotThrow(() => {
+          let ast = new pascal.Parser(code).parse();
+          // console.log(ast.block.compoundStatemen.children[1])
+          // console.log(ast);
+        });
+      });
+
+      it("with while statement", () => {
+        let code = `\
+program Main;
+var a, b : integer;
+
+begin { Main }
+  a := 1;
+  while(a > 10) begin
+    while(a < 15) a := a-1
+  end;
+  b := 0
+end.  { Main }`;
+        assert.doesNotThrow(() => {
+          let ast = new pascal.Parser(code).parse();
+          console.log(ast.block.compoundStatemen.children[1])
+          console.log(ast.block.compoundStatemen.children[1].body.children)
+          console.log(ast);
+        });
+      });
     });
 
     describe("should throw", () => {
