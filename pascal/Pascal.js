@@ -12,25 +12,25 @@ const log = (...args) => {
 const INT_CONST = "INT_CONST";
 const REAL_CONST = "REAL_CONST";
 
-const PLUS = "PLUS";
-const MINUS = "MINUS";
-const MUL = "MUL";
+const PLUS = "+";
+const MINUS = "-";
+const MUL = "*";
 const INT_DIV = "INT_DIV";
-const FLOAT_DIV = "FLOAT_DIV";
-const EQ = "EQ";
-const GTEQ = "GTEQ";
-const LTEQ = "LTEQ";
-const GT = "GT";
-const LT = "LT";
+const FLOAT_DIV = "/";
+const EQ = "=";
+const GTEQ = ">=";
+const LTEQ = "<=";
+const GT = ">";
+const LT = "<";
 
 const EOF = "EOF";
-const LPAREN = "LPAREN";
-const RPAREN = "RPAREN";
-const DOT = "DOT";
+const LPAREN = "(";
+const RPAREN = ")";
+const DOT = ".";
 const BEGIN = "BEGIN";
 const END = "END";
-const SEMI = "SEMI";
-const ASSIGN = "ASSIGN";
+const SEMI = ";";
+const ASSIGN = ":=";
 const ID = "ID";
 const IF = "IF";
 const ELSE = "ELSE";
@@ -39,8 +39,8 @@ const WHILE = "WHILE";
 const PROGRAM = "PROGRAM";
 const PROCEDURE = "PROCEDURE";
 const VAR = "VAR";
-const COLON = "COLON";
-const COMMA = "COMMA";
+const COLON = ":";
+const COMMA = ",";
 const INTEGER = "INTEGER"; //type
 const REAL = "REAL"; //type
 
@@ -101,13 +101,21 @@ const RESERVED_KEYWORDS = {
   WHILE: (l, c) => new Token(WHILE, "WHILE", l, c),
 };
 
-const isDigit = (c) => c && c.charCodeAt(0) >= 48 && c.charCodeAt(0) <= 57;
-const isUnderScore = (c) => c === "_";
-const isAb = (c) =>
-  c &&
-  ((c.charCodeAt(0) >= 97 && c.charCodeAt(0) <= 122) || // 'a' - 'z'
-    (c.charCodeAt(0) >= 65 && c.charCodeAt(0) <= 90)); // 'A' - 'Z'
-const isAlnum = (c) => c && (isAb(c) || isDigit(c));
+// 1: white space
+// 2: comment
+// 3: id
+// 4: number
+// 5: ops double (:= >= <=)
+// 6: ops single (+ - * ( ) . ; / , : = < >)
+
+const tokenType = {
+  ws: 1,
+  comment: 2,
+  id: 3,
+  number: 4,
+  opsDouble: 5,
+  opsSingle: 6,
+};
 
 class Lexer {
   constructor(code) {
@@ -115,6 +123,11 @@ class Lexer {
     this.line = 1;
     this.pos = 0;
     this.column = 1;
+    // y is important
+    // y 表示粘滞匹配
+    // 相当于给我的每个捕获组加了一个 ^(以...开头) 标记
+    this.re =
+      /(\s+)|({.*})|([a-zA-Z_][a-zA-Z0-9_]*)|([0-9]+(?:\.[0-9]+)?)|(:=|<=|>=)|([\+\-\*\(\)\.;\/,:=<>])/y;
   }
 
   get char() {
@@ -122,12 +135,18 @@ class Lexer {
   }
 
   #advance() {
-    if (this.char === "\n") {
-      this.line++;
-      this.column = 0;
+    const ad = () => {
+      if (this.char === "\n") {
+        this.line++;
+        this.column = 0;
+      }
+      this.pos++;
+      this.column++;
+    };
+    let n = this.re.lastIndex - this.pos;
+    for (let i = 0; i < n; i++) {
+      ad();
     }
-    this.pos++;
-    this.column++;
   }
 
   #error(c) {
@@ -136,172 +155,50 @@ Invalid character: ${JSON.stringify(c)}. \
 at line:${this.line} column:${this.column}`);
   }
 
-  #skipWhiteSpace() {
-    while (
-      this.pos <= this.code.length - 1 &&
-      (this.char === " " || this.char === "\t" || this.char === "\n")
-    ) {
-      this.#advance();
-    }
-  }
-
-  #skipComment() {
-    while (this.char !== "}") {
-      this.#advance();
-    }
-    this.#advance(); // closing '}'
-  }
-
-  #peek() {
-    return this.code[this.pos + 1];
-  }
-
-  #id() {
-    let ret = "";
-    while (this.char && (isAlnum(this.char) || isUnderScore(this.char))) {
-      ret += this.char;
-      this.#advance();
-    }
-
-    return (
-      RESERVED_KEYWORDS[ret.toUpperCase()]?.(this.line, this.column) ||
-      new Token(ID, ret, this.line, this.column)
-    );
-  }
-
-  #getNumber() {
-    let num = "";
-    while (isDigit(this.char)) {
-      num += this.char;
-      this.#advance();
-    }
-
-    if (this.char === ".") {
-      num += this.char;
-      this.#advance();
-      while (this.char && isDigit(this.char)) {
-        num += this.char;
-        this.#advance();
-      }
-      return new Token(REAL_CONST, parseFloat(num), this.line, this.column);
-    } else {
-      return new Token(INT_CONST, parseInt(num, 10), this.line, this.column);
-    }
-  }
-
   getNextToken() {
-    this.#skipWhiteSpace();
+    const token = (t, v) => new Token(t, v, this.line, this.column);
 
-    if (this.pos > this.code.length - 1) {
-      return new Token(EOF, EOF, this.line, this.column);
+    let ret = this.re.exec(this.code);
+
+    // skip comment and whitespace
+    while (ret && (ret[tokenType.comment] || ret[tokenType.ws])) {
+      this.#advance();
+      ret = this.re.exec(this.code);
     }
 
-    let c = this.char;
-
-    if (c === "{") {
-      while (this.char === "{") {
-        this.#skipComment();
-        this.#skipWhiteSpace();
+    if (ret == null) {
+      if (this.pos > this.code.length - 1) {
+        return token(EOF, EOF);
       }
-      this.#skipWhiteSpace();
-      c = this.char;
+      this.#error(this.char);
+    }
 
-      // after skip those, now maybe is end of file
-      // otherwise, will throw
-      if (c == undefined) {
-        return new Token(EOF, EOF, this.line, this.column);
+    let val;
+    if ((val = ret[tokenType.id])) {
+      this.#advance();
+      return (
+        RESERVED_KEYWORDS[val.toUpperCase()]?.(this.line, this.column) ||
+        token(ID, val)
+      );
+    }
+
+    if ((val = ret[tokenType.number])) {
+      this.#advance();
+      if (val.indexOf(".") === -1) {
+        return token(INT_CONST, parseInt(val, 10));
       }
+      return token(REAL_CONST, parseFloat(val));
     }
 
-    if (isAb(c) || isUnderScore(c)) {
-      return this.#id();
-    }
-
-    if (isDigit(c)) {
-      return this.#getNumber();
-    }
-
-    if (c === "+") {
+    if ((val = ret[tokenType.opsDouble])) {
       this.#advance();
-      return new Token(PLUS, "+", this.line, this.column);
+      return token(val, val);
     }
 
-    if (c === "-") {
+    if ((val = ret[tokenType.opsSingle])) {
       this.#advance();
-      return new Token(MINUS, "-", this.line, this.column);
+      return token(val, val);
     }
-
-    if (c === "*") {
-      this.#advance();
-      return new Token(MUL, "*", this.line, this.column);
-    }
-
-    if (c === "(") {
-      this.#advance();
-      return new Token(LPAREN, "(", this.line, this.column);
-    }
-
-    if (c === ")") {
-      this.#advance();
-      return new Token(RPAREN, ")", this.line, this.column);
-    }
-
-    if (c === ".") {
-      this.#advance();
-      return new Token(DOT, ".", this.line, this.column);
-    }
-
-    if (c === ";") {
-      this.#advance();
-      return new Token(SEMI, ";", this.line, this.column);
-    }
-
-    if (c === "/") {
-      this.#advance();
-      return new Token(FLOAT_DIV, "/", this.line, this.column);
-    }
-
-    if (c === ",") {
-      this.#advance();
-      return new Token(COMMA, ",", this.line, this.column);
-    }
-
-    if (c === ":") {
-      if (this.#peek() === "=") {
-        this.#advance();
-        this.#advance();
-        return new Token(ASSIGN, ":=", this.line, this.column);
-      }
-      this.#advance();
-      return new Token(COLON, ":", this.line, this.column);
-    }
-
-    if (c === "=") {
-      this.#advance();
-      return new Token(EQ, "=", this.line, this.column);
-    }
-
-    if (c === "<") {
-      if (this.#peek() === "=") {
-        this.#advance();
-        this.#advance();
-        return new Token(LTEQ, "<=", this.line, this.column);
-      }
-      this.#advance();
-      return new Token(LT, "<", this.line, this.column);
-    }
-
-    if (c === ">") {
-      if (this.#peek() === "=") {
-        this.#advance();
-        this.#advance();
-        return new Token(GTEQ, ">=", this.line, this.column);
-      }
-      this.#advance();
-      return new Token(GT, ">", this.line, this.column);
-    }
-
-    this.#error(c);
   }
 }
 

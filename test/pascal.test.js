@@ -3,7 +3,69 @@ const assert = require("assert");
 
 describe.only("pascal", () => {
   describe("lexer", () => {
+    it("should not include unicode", () => {
+      let code = `\
+你好 PROGRAM P1;`;
+      let l = new pascal.Lexer(code);
+      assert.throws(() => {
+        try {
+          while (l.getNextToken().type !== pascal.Token.t.EOF) {
+            l.getNextToken();
+          }
+        } catch (err) {
+          // console.error(err);
+          throw err;
+        }
+      }, /Invalid character: "你"/);
+    });
+
+    it("should not include invalid symbol", () => {
+      let code = `\
+PROGRAM P1;
+VAR
+   a, b       : INTEGER;
+   c          : REAL;
+BEGIN
+   c := c ### 10;
+END.
+`;
+      let l = new pascal.Lexer(code);
+      assert.throws(() => {
+        try {
+          while (l.getNextToken().type !== pascal.Token.t.EOF) {
+            l.getNextToken();
+          }
+        } catch (err) {
+          // console.error(err);
+          throw err;
+        }
+      }, /Invalid character: "#"/);
+    });
+
     it("PROGRAM P1", () => {
+      let code = `PROGRAM P1;`;
+      let l = new pascal.Lexer(code);
+      let gnt = l.getNextToken;
+      l.getNextToken = function getNextToken() {
+        let t = gnt.call(this);
+        console.log(`line: ${t.line} column: ${t.column}`);
+        t.line = undefined;
+        t.column = undefined;
+        return t;
+      };
+
+      assert.deepStrictEqual(
+        l.getNextToken(),
+        new pascal.Token(pascal.Token.t.PROGRAM, "PROGRAM")
+      );
+
+      assert.deepStrictEqual(
+        l.getNextToken(),
+        new pascal.Token(pascal.Token.t.ID, "P1")
+      );
+    });
+
+    it("PROGRAM P2", () => {
       let code = `\
 PROGRAM P1;
 VAR
@@ -570,8 +632,8 @@ begin { Main }
 end.  { Main }`;
         assert.doesNotThrow(() => {
           let ast = new pascal.Parser(code).parse();
-          console.log(ast.block.compoundStatemen.children[1])
-          console.log(ast.block.compoundStatemen.children[1].body.children)
+          console.log(ast.block.compoundStatemen.children[1]);
+          console.log(ast.block.compoundStatemen.children[1].body.children);
           console.log(ast);
         });
       });
