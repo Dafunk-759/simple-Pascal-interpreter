@@ -1,16 +1,25 @@
 {
-  "name": "compiler",
+  "name": "pascal",
   "version": "1.0.0",
-  "description": "",
+  "description": "simple pascal interpreter",
   "main": "index.js",
+  "bin": {
+    "pascal": "bin/pascal.js"
+  },
   "scripts": {
     "test": "mocha",
-    "test-log": "export MYLOG=1 && npm test"
+    "test-log": "export MYLOG=1 && npm test",
+    "start": "node bin/pascal.js",
+    "prepare": "husky install"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "devDependencies": {
-    "mocha": "^10.0.0"
+    "mocha": "^10.0.0",
+    "husky": "^8.0.0"
+  },
+  "dependencies": {
+    "commander": "^9.4.0"
   }
 }

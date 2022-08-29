@@ -756,6 +756,9 @@ const Builtin = {
     assert(val, msg) {
       assert.ok(val, msg);
     },
+    log(...args) {
+      console.log(...args);
+    },
   },
 };
 

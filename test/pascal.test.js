@@ -703,11 +703,23 @@ END.  {Part10}`;
 
   describe("Interpreter", () => {
     describe("should eval successfully", () => {
-      it("with builtin procedure", () => {
+      it("with builtin procedure 'assert'", () => {
         let code = `\
 program Main;
 begin { Main }
   assert(1);
+end.  { Main }`;
+        assert.doesNotThrow(() => {
+          let i = new pascal.Interpreter(code);
+          i.eval();
+        });
+      });
+
+      it("with builtin procedure 'log'", () => {
+        let code = `\
+program Main;
+begin { Main }
+  log(1);
 end.  { Main }`;
         assert.doesNotThrow(() => {
           let i = new pascal.Interpreter(code);
@@ -862,7 +874,7 @@ end.`;
       });
     });
 
-    it.only("with nested procedure call", () => {
+    it("with nested procedure call", () => {
       let code = `\
 program Main;
 
