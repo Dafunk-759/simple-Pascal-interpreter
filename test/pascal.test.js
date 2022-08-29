@@ -702,8 +702,20 @@ END.  {Part10}`;
   });
 
   describe("Interpreter", () => {
-    describe("should print GLOBAL_SCOPE successfully", () => {
-      it("a b c d number", () => {
+    describe("should eval successfully", () => {
+      it("with builtin procedure", () => {
+        let code = `\
+program Main;
+begin { Main }
+  assert(1);
+end.  { Main }`;
+        assert.doesNotThrow(() => {
+          let i = new pascal.Interpreter(code);
+          i.eval();
+        });
+      });
+
+      it("with arithmetic and assignment", () => {
         let code = `\
 PROGRAM p;
 VAR
@@ -716,17 +728,17 @@ BEGIN
     b := 10 * a + 10 * number div 4;
     c := a - - b;
     d := c / 3;
+    assert(d = 13.333333333333334)
   END;
   a := 10;
 END.`;
         assert.doesNotThrow(() => {
           let i = new pascal.Interpreter(code);
           i.eval();
-          console.log(i.GLOBAL_SCOPE);
         });
       });
 
-      it("a b number y", () => {
+      it("with arithmetic and assignment2", () => {
         let code = `\
 PROGRAM Part11;
 VAR
@@ -738,17 +750,17 @@ BEGIN {Part11}
    number := 2;
    a := number ;
    b := 10 * a + 10 * number DIV 4;
-   y := 20 / 7 + 3.14
+   y := 20 / 7 + 3.14;
+   assert(y = 5.997142857142857)
 END.  {Part11}`;
         assert.doesNotThrow(() => {
           let i = new pascal.Interpreter(code);
           i.eval();
-          console.log(i.GLOBAL_SCOPE);
         });
       });
     });
 
-    it("program part10", () => {
+    it("with nested statement block", () => {
       let code = `\
 PROGRAM Part10;
 VAR
@@ -765,6 +777,7 @@ BEGIN {Part10}
    END;
    x := 11;
    y := 20 / 7 + 3.14;
+   assert(b = 25)
    { writeln('a = ', a); }
    { writeln('b = ', b); }
    { writeln('c = ', c); }
@@ -775,7 +788,108 @@ END.  {Part10}`;
       assert.doesNotThrow(() => {
         let i = new pascal.Interpreter(code);
         i.eval();
-        console.log(i.GLOBAL_SCOPE);
+      });
+    });
+
+    it("with procedure call", () => {
+      let code = `\
+program Main;
+
+procedure Alpha(a : integer; b : integer);
+var x : integer;
+begin
+   x := (a + b ) * 2;
+   assert(x = 30)
+end;
+
+begin { Main }
+
+   Alpha(3 + 5, 7);  { procedure call }
+
+end.  { Main }`;
+      assert.doesNotThrow(() => {
+        let i = new pascal.Interpreter(code);
+        i.eval();
+      });
+    });
+
+    it("with procedure call and if statement", () => {
+      let code = `\
+program Main;
+
+procedure Alpha(a : integer; b : integer);
+var x : integer;
+begin
+  if ((a + b) * 2 > 2)
+    assert(1)
+  else assert(0);
+end;
+
+begin { Main }
+
+  Alpha(1, 1);  { procedure call }
+
+end.  { Main }`;
+      assert.doesNotThrow(() => {
+        let i = new pascal.Interpreter(code);
+        i.eval();
+      });
+    });
+
+    it("with while statement(Factorial)", () => {
+      let code = `\
+program Factorial;
+var 
+  ret, n : integer;
+begin
+  ret := 1;
+  n := 5;
+
+  if (n < 0) assert(0)
+  else if (n = 0) ret := 1
+  else begin
+    while(n > 0) begin
+      ret := ret * n;
+      n := n - 1
+    end
+  end;
+
+  assert(ret = 120)
+end.`;
+      assert.doesNotThrow(() => {
+        let i = new pascal.Interpreter(code);
+        i.eval();
+      });
+    });
+
+    it.only("with nested procedure call", () => {
+      let code = `\
+program Main;
+
+procedure Alpha(a : integer; b : integer);
+var x : integer;
+
+  procedure Beta(a : integer; b : integer);
+  var x : integer;
+  begin
+    x := a * 10 + b * 2;
+    assert(x = 70)
+  end;
+
+begin
+  x := (a + b ) * 2;
+  assert(x = 30);
+  Beta(5, 10)      { procedure call }
+end;
+
+begin { Main }
+
+  Alpha(3 + 5, 7);  { procedure call }
+
+end.  { Main }`;
+      assert.doesNotThrow(() => {
+        let i = new pascal.Interpreter(code);
+        i.eval();
       });
     });
   });

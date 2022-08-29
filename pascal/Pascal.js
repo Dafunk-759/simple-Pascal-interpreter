@@ -1,3 +1,5 @@
+const assert = require("assert");
+
 // console.log("MYLOG:", JSON.stringify(process.env.MYLOG));
 const log = (...args) => {
   if (+process.env.MYLOG) {
@@ -160,17 +162,17 @@ at line:${this.line} column:${this.column}`);
 
     let ret = this.re.exec(this.code);
 
-    // skip comment and whitespace
-    while (ret && (ret[tokenType.comment] || ret[tokenType.ws])) {
-      this.#advance();
-      ret = this.re.exec(this.code);
-    }
-
     if (ret == null) {
       if (this.pos > this.code.length - 1) {
         return token(EOF, EOF);
       }
       this.#error(this.char);
+    }
+
+    // skip comment and whitespace
+    if (ret[tokenType.comment] || ret[tokenType.ws]) {
+      this.#advance();
+      return this.getNextToken();
     }
 
     let val;
@@ -245,6 +247,7 @@ class ProcedureCall extends AST {
   constructor(procName, actualParams, token) {
     super();
     this.procName = procName;
+    this.procSymbol = undefined;
     this.actualParams = actualParams;
     this.token = token;
   }
@@ -632,7 +635,7 @@ at line: ${this.currentToken.line} column: ${this.currentToken.column}
       }
       return ds;
     } else {
-      return this.#empty();
+      return [];
     }
   }
 
@@ -670,6 +673,7 @@ class Symbol {
   constructor(name, type) {
     this.name = name;
     this.type = type;
+    this.scopeLevel = 0;
   }
 }
 
@@ -689,6 +693,7 @@ class ProcedureSymbol extends Symbol {
   constructor(name, params = []) {
     super(name);
     this.params = params;
+    this.procBlock = undefined;
   }
 }
 
@@ -717,6 +722,7 @@ class Scope {
 
   define(symbol) {
     log("Define:", symbol);
+    symbol.scopeLevel = this.scopeLevel;
     this.symbols.set(symbol.name, symbol);
   }
 
@@ -744,6 +750,14 @@ class Visitor {
     }
   }
 }
+
+const Builtin = {
+  procedures: {
+    assert(val, msg) {
+      assert.ok(val, msg);
+    },
+  },
+};
 
 class SemanticAnalyzer extends Visitor {
   constructor() {
@@ -847,6 +861,7 @@ class SemanticAnalyzer extends Visitor {
       procSymbol.params.push(vs);
     });
 
+    procSymbol.procBlock = node.blockNode;
     this.visit(node.blockNode);
 
     // log(this.scope);
@@ -861,16 +876,21 @@ class SemanticAnalyzer extends Visitor {
 
     let ps = this.scope.lookup(procName);
 
-    if (ps == undefined) {
-      this.#error(`Undefined procedure: ${procName}`, token);
-    }
-
-    if (ps.params.length !== actualParams.length) {
-      this.#error(
-        `Procedure params error: ${procName} \
-expect ${ps.params.length} but got ${actualParams.length}`,
-        token
-      );
+    // scope中有这个procedure的声明
+    if (ps) {
+      if (ps.params.length !== actualParams.length) {
+        this.#error(
+          `Procedure params error: ${procName} \
+  expect ${ps.params.length} but got ${actualParams.length}`,
+          token
+        );
+      }
+      node.procSymbol = ps; // 在语法分析时 改变ast
+    } else {
+      // scope中没有 也不是bulitin
+      if (Builtin.procedures[procName] == undefined) {
+        this.#error(`Undefined procedure: ${procName}`, token);
+      }
     }
 
     node.actualParams.forEach((p) => {
@@ -896,6 +916,7 @@ class ActivationRecord {
 
   static t = {
     PROGRAM: "PROGRAM",
+    PROCEDURE: "PROCEDURE",
   };
 
   setItem(key, value) {
@@ -936,6 +957,10 @@ class Interpreter extends Visitor {
     this.callStack = new CallStack();
   }
 
+  #error(msg, token) {
+    throw new Error(`${msg} at line: ${token.line} column: ${token.column}`);
+  }
+
   visitBinOp(node) {
     switch (node.op.type) {
       case PLUS:
@@ -948,6 +973,16 @@ class Interpreter extends Visitor {
         return this.visit(node.left) / this.visit(node.right);
       case INT_DIV:
         return (this.visit(node.left) / this.visit(node.right)) | 0;
+      case EQ:
+        return this.visit(node.left) === this.visit(node.right);
+      case GTEQ:
+        return this.visit(node.left) >= this.visit(node.right);
+      case GT:
+        return this.visit(node.left) > this.visit(node.right);
+      case LTEQ:
+        return this.visit(node.left) <= this.visit(node.right);
+      case LT:
+        return this.visit(node.left) < this.visit(node.right);
     }
     throw node;
   }
@@ -973,9 +1008,19 @@ class Interpreter extends Visitor {
     this.callStack.top.setItem(node.left.value, this.visit(node.right));
   }
 
-  visitIfst(node) {}
+  visitIfst(node) {
+    if (this.visit(node.test)) {
+      this.visit(node.then);
+    } else {
+      this.visit(node.other);
+    }
+  }
 
-  visitWhileSt(node) {}
+  visitWhileSt(node) {
+    while (this.visit(node.test)) {
+      this.visit(node.body);
+    }
+  }
 
   visitVar(node) {
     let varName = node.value;
@@ -992,7 +1037,48 @@ class Interpreter extends Visitor {
 
   visitProcedureDecl(node) {}
 
-  visitProcedureCall(node) {}
+  visitProcedureCall(node) {
+    let builtinProcedure = Builtin.procedures[node.procName];
+    if (typeof builtinProcedure === "function") {
+      builtinProcedure(...node.actualParams.map((a) => this.visit(a)));
+      return;
+    }
+
+    let ar = new ActivationRecord(
+      node.procName,
+      ActivationRecord.t.PROCEDURE,
+      node.procSymbol.scopeLevel + 1
+    );
+
+    let ap = node.actualParams;
+    let fp = node.procSymbol.params;
+
+    if (ap.length !== fp.length) {
+      this.#error(
+        `Procedure params err: length not match actual length: \
+${ap.length} expected: ${fp.length}`,
+        node.token
+      );
+    }
+
+    ap.forEach((a, i) => {
+      let f = fp[i];
+      ar.setItem(f.name, this.visit(a));
+    });
+
+    // before enter block push ar
+    this.callStack.push(ar);
+    log("enter procedure:", node);
+    log(this.callStack);
+
+    this.visit(node.procSymbol.procBlock);
+    log(this.callStack.top.member);
+
+    // after exec block pop ar
+    this.callStack.pop();
+    log("leave procedure:", node);
+    log(this.callStack);
+  }
 
   visitProgram(node) {
     let ar = new ActivationRecord(node.name, ActivationRecord.t.PROGRAM, 1);
